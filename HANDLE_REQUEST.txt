@@ -1,0 +1,60 @@
+  METHOD if_http_extension~handle_request.
+
+    DATA: it_cursos   TYPE TABLE OF ycurso,
+          wa_cursos   TYPE ycurso,
+          v_type_crud TYPE string,
+          lv_return   TYPE string.
+
+    v_type_crud = server->request->get_header_field( name = '~request_method' ).
+
+    CASE v_type_crud.
+      WHEN 'GET'.
+        SELECT *
+          FROM ycurso
+          INTO TABLE it_cursos.
+
+        DATA(ls_json_response) = /ui2/cl_json=>serialize( EXPORTING data = it_cursos ).
+
+        server->response->set_cdata( data = ls_json_response ).
+
+      WHEN 'POST' OR 'PUT'.
+
+        lv_return = server->request->get_cdata( ).
+
+        /ui2/cl_json=>deserialize(
+           EXPORTING json = lv_return
+           CHANGING data = it_cursos ).
+
+        IF it_cursos IS NOT INITIAL.
+
+          LOOP AT it_cursos INTO wa_cursos.
+            MODIFY ycurso FROM wa_cursos.
+          ENDLOOP.
+
+          server->response->set_cdata( data = '200' ).
+        ELSE.
+          server->response->set_cdata( data = '404' ).
+        ENDIF.
+
+      WHEN 'DELETE'.
+
+        DATA: fields TYPE tihttpnvp.
+        server->request->get_form_fields( CHANGING fields = fields ).
+
+        READ TABLE fields WITH KEY name = 'nome' INTO DATA(v_nome).
+
+        IF v_nome-value NE ''.
+
+          DELETE FROM ycurso WHERE nome_curso = v_nome-value.
+          IF sy-subrc IS INITIAL.
+            server->response->set_cdata( data = '200' ).
+          ELSE.
+            server->response->set_cdata( data = '404' ).
+          ENDIF.
+        ELSE.
+          server->response->set_cdata( data = '404' ).
+        ENDIF.
+
+    ENDCASE.
+
+  ENDMETHOD.
